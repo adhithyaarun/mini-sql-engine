@@ -1,12 +1,19 @@
 import csv
 import sys
 import sqlparse as sql
+import itertools
+import statistics
 
 
 class SQL_Engine():
     def __init__(self, path):
         self.path = path
-        self.AGGREGATE = ['SUM', 'AVG', 'MAX', 'MIN']
+        self.AGGREGATE = {
+            'SUM': sum,
+            'AVG': statistics.mean,
+            'MAX': max,
+            'MIN': min
+        }
         self.RELATIONAL_OPERATORS = ['<', '>', '<=', '>=', '=', '<>']
         self.history = []
         self.quit = False
@@ -113,8 +120,14 @@ class SQL_Engine():
     def standardize_column(self):
         try:
             flag = False
-            for table in self.query['tables']:
-                if len(self.query['distinct']) > 0:
+            if len(self.query['distinct']) > 0:
+                if self.query['distinct'] == ['all']:
+                    cols = []
+                    for table in self.query['tables']:
+                        cols.extend(list(
+                            map(lambda a: table + '.' + a, list(self.tables[str(table)]['columns'].keys()))))
+                    self.query['distinct'] = cols
+                else:
                     for index, column in enumerate(self.query['distinct']):
                         if '.' in str(column):
                             specified = str(column).split('.')
@@ -134,34 +147,36 @@ class SQL_Engine():
                                 print('Ambiguous Query.')
                                 return False
                             else:
-                                if str(column) in self.tables[str(table)]['column_names']:
-                                    self.query['distinct'][index] = str(
-                                        table) + '.' + str(column)
-                                else:
-                                    print('Column {0} not in {1}'.format(
-                                        str(column), str(table)))
-                                    return False
-                elif len(self.query['aggregations']) > 0:
-                    aggregation = list(self.query['aggregations'].keys())[0]
-                    for index, column in enumerate(self.query['aggregations'][list(self.query['aggregations'].keys())[0]]):
-                        if '.' in str(column):
-                            specified = str(column).split('.')
-                            if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
-                                pass
-                            else:
-                                if specified[0] in self.query['tables']:
-                                    print('Column {0} not in {1}.'.format(
-                                        str(column), str(specified[0])))
-                                    return False
-                                else:
-                                    print('Table {0} does not exist.'.format(
-                                        str(specified[0])))
-                                    return False
+                                for table in self.query['tables']:
+                                    if str(column) in self.tables[str(table)]['column_names']:
+                                        self.query['distinct'][index] = str(
+                                            table) + '.' + str(column)
+                                    else:
+                                        print('Column {0} not in {1}'.format(
+                                            str(column), str(table)))
+                                        return False
+            elif len(self.query['aggregations']) > 0:
+                aggregation = list(self.query['aggregations'].keys())[0]
+                for index, column in enumerate(self.query['aggregations'][list(self.query['aggregations'].keys())[0]]):
+                    if '.' in str(column):
+                        specified = str(column).split('.')
+                        if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
+                            pass
                         else:
-                            if len(list(self.query['tables'])) > 1 and list(filter(lambda a: str(column) in self.tables[a]['column_names'], self.tables.keys())) == list(self.query['tables']):
-                                print('Ambiguous Query.')
+                            if specified[0] in self.query['tables']:
+                                print('Column {0} not in {1}.'.format(
+                                    str(column), str(specified[0])))
                                 return False
                             else:
+                                print('Table {0} does not exist.'.format(
+                                    str(specified[0])))
+                                return False
+                    else:
+                        if len(list(self.query['tables'])) > 1 and list(filter(lambda a: str(column) in self.tables[a]['column_names'], self.tables.keys())) == list(self.query['tables']):
+                            print('Ambiguous Query.')
+                            return False
+                        else:
+                            for table in self.query['tables']:
                                 if str(column) in self.tables[str(table)]['column_names']:
                                     self.query['aggregations'][list(self.query['aggregations'].keys())[
                                         0]][index] = str(table) + '.' + str(column)
@@ -169,10 +184,14 @@ class SQL_Engine():
                                     print('Column {0} not in {1}'.format(
                                         str(column), str(table)))
                                     return False
-                elif len(self.query['columns']) > 0:
-                    if self.query['columns'] == ['all']:
-                        self.query['columns'] = list(
-                            self.tables[str(table)]['columns'].keys())
+            elif len(self.query['columns']) > 0:
+                if self.query['columns'] == ['all']:
+                    cols = []
+                    for table in self.query['tables']:
+                        cols.extend(list(
+                            map(lambda a: table + '.' + a, list(self.tables[str(table)]['columns'].keys()))))
+                    self.query['columns'] = cols
+                else:
                     for index, column in enumerate(self.query['columns']):
                         if '.' in str(column):
                             specified = str(column).split('.')
@@ -192,45 +211,47 @@ class SQL_Engine():
                                 print('Ambiguous Query.')
                                 return False
                             else:
-                                if str(column) in self.tables[str(table)]['column_names']:
-                                    self.query['columns'][index] = str(
-                                        table) + '.' + str(column)
-                                else:
-                                    print('Column {0} not in {1}'.format(
-                                        str(column), str(table)))
-                                    return False
-                if len(self.query['conditions']) > 0:
-                    operators = ['<>', '<=', '>=', '<', '>', '=']
-                    for ind, condition in enumerate(self.query['conditions']):
-                        flag = False
-                        if str(condition) in ['AND', 'OR']:
-                            flag = True
-                            continue
-                        else:
-                            for operator in operators:
-                                if len(condition.split(operator)) > 1:
-                                    operation = condition.split(operator)
-                                    for index, column in enumerate(operation):
-                                        if str(column).isdigit() is True:
-                                            break
-                                        if '.' in str(column):
-                                            specified = str(column).split('.')
-                                            if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
-                                                pass
-                                            else:
-                                                if specified[0] in self.query['tables']:
-                                                    print('Column {0} not in {1}.'.format(
-                                                        str(column), str(specified[0])))
-                                                    return False
-                                                else:
-                                                    print('Table {0} does not exist.'.format(
-                                                        str(specified[0])))
-                                                    return False
+                                for table in self.query['tables']:
+                                    if str(column) in self.tables[str(table)]['column_names']:
+                                        self.query['columns'][index] = str(
+                                            table) + '.' + str(column)
+                                    else:
+                                        print('Column {0} not in {1}'.format(
+                                            str(column), str(table)))
+                                        return False
+            if len(self.query['conditions']) > 0:
+                operators = ['<>', '<=', '>=', '<', '>', '=']
+                for ind, condition in enumerate(self.query['conditions']):
+                    flag = False
+                    if str(condition) in ['AND', 'OR']:
+                        flag = True
+                        continue
+                    else:
+                        for operator in operators:
+                            if len(condition.split(operator)) > 1:
+                                operation = condition.split(operator)
+                                for index, column in enumerate(operation):
+                                    if str(column).isdigit() is True:
+                                        break
+                                    if '.' in str(column):
+                                        specified = str(column).split('.')
+                                        if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
+                                            pass
                                         else:
-                                            if len(list(self.query['tables'])) > 1 and list(filter(lambda a: str(column) in self.tables[a]['column_names'], self.tables.keys())) == list(self.query['tables']):
-                                                print('Ambiguous Query.')
+                                            if specified[0] in self.query['tables']:
+                                                print('Column {0} not in {1}.'.format(
+                                                    str(column), str(specified[0])))
                                                 return False
                                             else:
+                                                print('Table {0} does not exist.'.format(
+                                                    str(specified[0])))
+                                                return False
+                                    else:
+                                        if len(list(self.query['tables'])) > 1 and list(filter(lambda a: str(column) in self.tables[a]['column_names'], self.tables.keys())) == list(self.query['tables']):
+                                            print('Ambiguous Query.')
+                                            return False
+                                        else:
+                                            for table in self.query['tables']:
                                                 if str(column) in self.tables[str(table)]['column_names']:
                                                     operation[index] = str(
                                                         table) + '.' + str(column)
@@ -238,73 +259,201 @@ class SQL_Engine():
                                                     print('Column {0} not in {1}'.format(
                                                         str(column), str(table)))
                                                     return False
-                                    operation.append(operator)
-                                    self.query['conditions'][ind] = operation
-                                    flag = True
-                                    break
-                            if flag is False:
-                                print('Invalid operation')
-                                return False
+                                operation.append(operator)
+                                self.query['conditions'][ind] = operation
+                                flag = True
+                                break
+                        if flag is False:
+                            print('Invalid operation')
+                            return False
+
             return True
         except:
             print('Invalid Query.')
             return False
 
+    def aggregation_handler(self, function, column):
+        return self.AGGREGATE[function](column)
+
+    def extract_records(self):
+        table_recs = []
+        order = []
+        records = []
+        mapping = {}
+        i = 0
+        if len(self.query['tables']) > 1:
+            for table in self.query['tables']:
+                table_recs.append(
+                    list(map(lambda a: tuple(a.values()), self.tables[table]['records'])))
+                order = list(map(lambda a: table + '.' + a,
+                                 self.tables[table]['column_names']))
+                index = list(range(len(order)))
+                index = list(map(lambda a: tuple((i, a)), index))
+                i += 1
+                mapping.update(dict(zip(order, index)))
+            records = list(itertools.product(*table_recs))
+        else:
+            records = list(map(lambda a: tuple(a.values()),
+                               self.tables[self.query['tables'][0]]['records']))
+            order = list(map(lambda a: self.query['tables'][0] + '.' + a,
+                             self.tables[self.query['tables'][0]]['column_names']))
+            index = list(range(len(order)))
+            index = list(map(lambda a: tuple((i, a)), index))
+            mapping.update(dict(zip(order, index)))
+
+        approved = records
+        if len(self.query['conditions']) > 0:
+            approved = []
+            operation = None
+            passed_now = []
+            for condition in self.query['conditions']:
+                if condition not in ['OR', 'AND']:
+                    if '.' in condition[0] and '.' in condition[1]:
+                        col1 = condition[0]
+                        col2 = condition[1]
+                        op = condition[2]
+                        for row in records:
+                            index_1 = list(mapping[col1])
+                            index_2 = list(mapping[col2])
+                            if op == '<>':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] != row[index_2[0]][index_2[1]]:
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] != row[index_2[1]]:
+                                        passed_now.append(row)
+                            elif op == '<=':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] <= row[index_2[0]][index_2[1]]:
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] <= row[index_2[1]]:
+                                        passed_now.append(row)
+                            elif op == '>=':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] >= row[index_2[0]][index_2[1]]:
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] >= row[index_2[1]]:
+                                        passed_now.append(row)
+                            elif op == '<':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] < row[index_2[0]][index_2[1]]:
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] < row[index_2[1]]:
+                                        passed_now.append(row)
+                            elif op == '>':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] > row[index_2[0]][index_2[1]]:
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] > row[index_2[1]]:
+                                        passed_now.append(row)
+                            elif op == '=':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] == row[index_2[0]][index_2[1]]:
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] == row[index_2[1]]:
+                                        passed_now.append(row)
+                    else:
+                        col1 = condition[0]
+                        col2 = condition[1]
+                        op = condition[2]
+                        for row in records:
+                            index_1 = list(mapping[col1])
+                            if op == '<>':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] != int(col2):
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] != int(col2):
+                                        passed_now.append(row)
+
+                            elif op == '<=':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] <= int(col2):
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] <= int(col2):
+                                        passed_now.append(row)
+                            elif op == '>=':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] >= int(col2):
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] >= int(col2):
+                                        passed_now.append(row)
+                            elif op == '<':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] < int(col2):
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] < int(col2):
+                                        passed_now.append(row)
+                            elif op == '>':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] > int(col2):
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] > int(col2):
+                                        print('{0}, {1}'.format(
+                                            row[index_1[1]], col2))
+                                        passed_now.append(row)
+                            elif op == '=':
+                                if len(self.query['tables']) > 1:
+                                    if row[index_1[0]][index_1[1]] == int(col2):
+                                        passed_now.append(row)
+                                else:
+                                    if row[index_1[1]] == int(col2):
+                                        passed_now.append(row)
+                else:
+                    approved = passed_now
+                    passed_now = []
+                    operation = condition
+            if operation is not None:
+                if operation == 'OR':
+                    approved = list(set(approved).union(set(passed_now)))
+                elif operation == 'AND':
+                    approved = list(
+                        set(approved).intersection(set(passed_now)))
+            else:
+                approved = passed_now
+        print(approved)
+        return approved
+
     def process_query(self):
         try:
+            result = None
             if self.table_check() and self.standardize_column():
+                allowed = self.extract_records()
+
                 if len(self.query['distinct']) > 0:
+                    columns = []
+                    for column in self.query['distinct']:
+                        specified = str(column).split('.')
+                        columns.append(
+                            self.tables[specified[0]]['columns'][specified[1]])
+                    result = set(columns)
 
                 elif len(self.query['aggregations']) > 0:
-                    aggregation = list(
-                        self.query['aggregations'].keys())[0]
-                    for column in self.query['aggregations'][list(self.query['aggregations'].keys())[0]]:
-                        if '.' in str(column):
-                            specified = str(column).split('.')
-                            if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
-                                print(self.tables[specified[0]]
-                                      ['columns'][specified[1]])
-                                self.query['aggregations'][list(self.query['aggregations'].keys())[
-                                    0]].remove(column)
-                            else:
-                                print('Invalid Query.')
-                                return
-                        else:
-                            if len(list(self.query['tables'])) > 1 and list(filter(lambda a: str(column) in self.tables[a]['column_names'], self.tables.keys())) == list(self.query['tables']):
-                                print('Ambiguous Query.')
-                                return
-                            else:
-                                if str(column) in self.tables[str(table)]['column_names']:
-                                    print(self.tables[str(table)]
-                                          ['columns'][str(column)])
-                                else:
-                                    print('Column {0} not in {1}'.format(
-                                        str(column), str(table)))
+                    column = self.query['aggregations'][list(
+                        self.query['aggregations'].keys())[0]][0]
+                    specified = str(column).split('.')
+                    columns = self.tables[specified[0]
+                                          ]['columns'][specified[1]]
+                    result = self.aggregation_handler(list(self.query['aggregations'].keys())[
+                                                      0], columns)
+
                 elif len(self.query['columns']) > 0:
-                    if self.query['columns'] == ['all']:
-                        self.query['columns'] = list(
-                            self.tables[str(table)]['columns'].keys())
+                    columns = []
                     for column in self.query['columns']:
-                        if '.' in str(column):
-                            specified = str(column).split('.')
-                            if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
-                                print(self.tables[specified[0]]
-                                      ['columns'][specified[1]])
-                                self.query['columns'].remove(column)
-                            else:
-                                print('Invalid Query.')
-                                return
-                        else:
-                            if len(list(self.query['tables'])) > 1 and list(filter(lambda a: str(column) in self.tables[a]['column_names'], self.tables.keys())) == list(self.query['tables']):
-                                print('Ambiguous Query.')
-                                return
-                            else:
-                                if str(column) in self.tables[str(table)]['column_names']:
-                                    print(self.tables[str(table)]
-                                          ['columns'][str(column)])
-                                else:
-                                    print('Column {0} not in {1}'.format(
-                                        str(column), str(table)))
+                        specified = str(column).split('.')
+                        columns.append(
+                            self.tables[specified[0]]['columns'][specified[1]])
+                    result = list(itertools.product(*columns))
+            return result
         except:
             print('Invalid Query.')
             return
@@ -343,7 +492,7 @@ class SQL_Engine():
 
                 if len(parsed['columns']) == 1:
                     extracted = parsed['columns'][0].split(')')[0]
-                    if extracted.split('(')[0].upper() in self.AGGREGATE:
+                    if extracted.split('(')[0].upper() in list(self.AGGREGATE.keys()):
                         parsed['aggregations'][extracted.split('(')[0].upper()] = [
                             extracted.split('(')[1]]
                         parsed['columns'] = []
