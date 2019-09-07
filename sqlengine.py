@@ -132,7 +132,7 @@ class SQL_Engine():
                         if '.' in str(column):
                             specified = str(column).split('.')
                             if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
-                                pass
+                                self.query['distinct'][index] = str(column)
                             else:
                                 if specified[0] in self.query['tables']:
                                     print('Column {0} not in {1}.'.format(
@@ -151,6 +151,7 @@ class SQL_Engine():
                                     if str(column) in self.tables[str(table)]['column_names']:
                                         self.query['distinct'][index] = str(
                                             table) + '.' + str(column)
+                                        break
                                     else:
                                         print('Column {0} not in {1}'.format(
                                             str(column), str(table)))
@@ -161,7 +162,8 @@ class SQL_Engine():
                     if '.' in str(column):
                         specified = str(column).split('.')
                         if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
-                            pass
+                            self.query['aggregations'][list(self.query['aggregations'].keys())[
+                                0]][index] = str(column)
                         else:
                             if specified[0] in self.query['tables']:
                                 print('Column {0} not in {1}.'.format(
@@ -180,6 +182,7 @@ class SQL_Engine():
                                 if str(column) in self.tables[str(table)]['column_names']:
                                     self.query['aggregations'][list(self.query['aggregations'].keys())[
                                         0]][index] = str(table) + '.' + str(column)
+                                    break
                                 else:
                                     print('Column {0} not in {1}'.format(
                                         str(column), str(table)))
@@ -196,7 +199,7 @@ class SQL_Engine():
                         if '.' in str(column):
                             specified = str(column).split('.')
                             if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
-                                pass
+                                self.query['columns'][index] = str(column)
                             else:
                                 if specified[0] in self.query['tables']:
                                     print('Column {0} not in {1}.'.format(
@@ -215,6 +218,7 @@ class SQL_Engine():
                                     if str(column) in self.tables[str(table)]['column_names']:
                                         self.query['columns'][index] = str(
                                             table) + '.' + str(column)
+                                        break
                                     else:
                                         print('Column {0} not in {1}'.format(
                                             str(column), str(table)))
@@ -420,39 +424,46 @@ class SQL_Engine():
                         set(approved).intersection(set(passed_now)))
             else:
                 approved = passed_now
-        print(approved)
-        return approved
+        return (mapping, approved)
+
+    def projected_columns(self, column_names, mapping, approved):
+        names = tuple(column_names)
+        projected = []
+        for row in approved:
+            record = []
+            for name in column_names:
+                if len(self.query['tables']) > 1:
+                    record.append(row[mapping[name][0]][mapping[name][1]])
+                else:
+                    record.append(row[mapping[name][1]])
+            projected.append(tuple(record))
+        return (names, projected)
 
     def process_query(self):
         try:
             result = None
             if self.table_check() and self.standardize_column():
-                allowed = self.extract_records()
+                (mapping, approved) = self.extract_records()
 
                 if len(self.query['distinct']) > 0:
-                    columns = []
-                    for column in self.query['distinct']:
-                        specified = str(column).split('.')
-                        columns.append(
-                            self.tables[specified[0]]['columns'][specified[1]])
-                    result = set(columns)
-
+                    (names, projected) = self.projected_columns(
+                        self.query['distinct'], mapping, approved)
+                    result = list(set(projected))
+                    print(result)
                 elif len(self.query['aggregations']) > 0:
                     column = self.query['aggregations'][list(
                         self.query['aggregations'].keys())[0]][0]
-                    specified = str(column).split('.')
-                    columns = self.tables[specified[0]
-                                          ]['columns'][specified[1]]
+                    (names, projected) = self.projected_columns(
+                        [column], mapping, approved)
+                    columns = list(map(lambda a: a[0], projected))
                     result = self.aggregation_handler(list(self.query['aggregations'].keys())[
                                                       0], columns)
-
+                    print(result)
                 elif len(self.query['columns']) > 0:
-                    columns = []
-                    for column in self.query['columns']:
-                        specified = str(column).split('.')
-                        columns.append(
-                            self.tables[specified[0]]['columns'][specified[1]])
-                    result = list(itertools.product(*columns))
+                    (names, projected) = self.projected_columns(
+                        self.query['columns'], mapping, approved)
+                    result = list(projected)
+                    print(result)
             return result
         except:
             print('Invalid Query.')
@@ -570,84 +581,3 @@ if __name__ == '__main__':
     else:
         engine = SQL_Engine(sys.argv[1])
         engine.run()
-
-# def process_query(self):
-    #     try:
-    #         if self.table_check() and self.standardize_column():
-    #             print(self.query)
-    #             for table in self.query['tables']:
-    #                 if len(self.query['distinct']) > 0:
-    #                     for column in self.query['distinct']:
-    #                         if '.' in str(column):
-    #                             specified = str(column).split('.')
-    #                             if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
-    #                                 print(self.tables[specified[0]]
-    #                                       ['columns'][specified[1]])
-    #                                 self.query['distinct'].remove(column)
-    #                             else:
-    #                                 print('Invalid Query.')
-    #                                 return
-    #                         else:
-    #                             if len(list(self.query['tables'])) > 1 and list(filter(lambda a: str(column) in self.tables[a]['column_names'], self.tables.keys())) == list(self.query['tables']):
-    #                                 print('Ambiguous Query.')
-    #                                 return
-    #                             else:
-    #                                 if str(column) in self.tables[str(table)]['column_names']:
-    #                                     print(self.tables[str(table)]
-    #                                           ['columns'][str(column)])
-    #                                 else:
-    #                                     print('Column {0} not in {1}'.format(
-    #                                         str(column), str(table)))
-    #                 elif len(self.query['aggregations']) > 0:
-    #                     aggregation = list(
-    #                         self.query['aggregations'].keys())[0]
-    #                     for column in self.query['aggregations'][list(self.query['aggregations'].keys())[0]]:
-    #                         if '.' in str(column):
-    #                             specified = str(column).split('.')
-    #                             if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
-    #                                 print(self.tables[specified[0]]
-    #                                       ['columns'][specified[1]])
-    #                                 self.query['aggregations'][list(self.query['aggregations'].keys())[
-    #                                     0]].remove(column)
-    #                             else:
-    #                                 print('Invalid Query.')
-    #                                 return
-    #                         else:
-    #                             if len(list(self.query['tables'])) > 1 and list(filter(lambda a: str(column) in self.tables[a]['column_names'], self.tables.keys())) == list(self.query['tables']):
-    #                                 print('Ambiguous Query.')
-    #                                 return
-    #                             else:
-    #                                 if str(column) in self.tables[str(table)]['column_names']:
-    #                                     print(self.tables[str(table)]
-    #                                           ['columns'][str(column)])
-    #                                 else:
-    #                                     print('Column {0} not in {1}'.format(
-    #                                         str(column), str(table)))
-    #                 elif len(self.query['columns']) > 0:
-    #                     if self.query['columns'] == ['all']:
-    #                         self.query['columns'] = list(
-    #                             self.tables[str(table)]['columns'].keys())
-    #                     for column in self.query['columns']:
-    #                         if '.' in str(column):
-    #                             specified = str(column).split('.')
-    #                             if specified[0] in self.query['tables'] and specified[1] in self.tables[specified[0]]['column_names']:
-    #                                 print(self.tables[specified[0]]
-    #                                       ['columns'][specified[1]])
-    #                                 self.query['columns'].remove(column)
-    #                             else:
-    #                                 print('Invalid Query.')
-    #                                 return
-    #                         else:
-    #                             if len(list(self.query['tables'])) > 1 and list(filter(lambda a: str(column) in self.tables[a]['column_names'], self.tables.keys())) == list(self.query['tables']):
-    #                                 print('Ambiguous Query.')
-    #                                 return
-    #                             else:
-    #                                 if str(column) in self.tables[str(table)]['column_names']:
-    #                                     print(self.tables[str(table)]
-    #                                           ['columns'][str(column)])
-    #                                 else:
-    #                                     print('Column {0} not in {1}'.format(
-    #                                         str(column), str(table)))
-    #     except:
-    #         print('Invalid Query.')
-    #         return
