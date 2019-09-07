@@ -439,6 +439,28 @@ class SQL_Engine():
             projected.append(tuple(record))
         return (names, projected)
 
+    def project(self, records, names, aggregation=False):
+        if records is None:
+            print('Empty set.')
+        else:
+            for i in range(len(names)):
+                if i == len(names) - 1:
+                    print('{0}'.format(names[i]), end='')
+                else:
+                    print('{0}, '.format(names[i]), end='')
+
+            print('')
+            if aggregation is True:
+                print(records)
+            else:
+                for i in range(len(records)):
+                    for j in range(len(records[i])):
+                        if j == len(records[i]) - 1:
+                            print('{0}'.format(records[i][j]), end='')
+                        else:
+                            print('{0}, '.format(records[i][j]), end='')
+                    print('')
+
     def process_query(self):
         try:
             result = None
@@ -448,22 +470,26 @@ class SQL_Engine():
                 if len(self.query['distinct']) > 0:
                     (names, projected) = self.projected_columns(
                         self.query['distinct'], mapping, approved)
-                    result = list(set(projected))
-                    print(result)
+                    if len(projected) > 0:
+                        result = list(set(projected))
+                    self.project(result, names)
                 elif len(self.query['aggregations']) > 0:
                     column = self.query['aggregations'][list(
                         self.query['aggregations'].keys())[0]][0]
                     (names, projected) = self.projected_columns(
                         [column], mapping, approved)
                     columns = list(map(lambda a: a[0], projected))
-                    result = self.aggregation_handler(list(self.query['aggregations'].keys())[
-                                                      0], columns)
-                    print(result)
+                    if len(columns) > 0:
+                        result = self.aggregation_handler(list(self.query['aggregations'].keys())[
+                            0], columns)
+                    self.project(result, ['{0}({1})'.format(
+                        list(self.query['aggregations'].keys())[0], column)], True)
                 elif len(self.query['columns']) > 0:
                     (names, projected) = self.projected_columns(
                         self.query['columns'], mapping, approved)
-                    result = list(projected)
-                    print(result)
+                    if len(projected) > 0:
+                        result = list(projected)
+                    self.project(result, names)
             return result
         except:
             print('Invalid Query.')
@@ -556,7 +582,7 @@ class SQL_Engine():
 
             for query in queries:
                 query_list = list(
-                    filter(lambda a: str(a) != ' ', query.tokens))
+                    filter(lambda a: str(a) != ' ' and str(a) != ';', query.tokens))
 
                 (success, message, self.query) = self.parse_query(query_list)
 
