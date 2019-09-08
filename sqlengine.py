@@ -614,6 +614,9 @@ class SQL_Engine():
             queries = self.extract_standardised(raw_query)
 
             for query in queries:
+                if len(query.tokens) > 1 and str(query.tokens[-1]) != ';':
+                    print('Missing semicolon.')
+                    break
                 query_list = list(
                     filter(lambda a: str(a) != ' ' and str(a) != ';', query.tokens))
 
@@ -641,6 +644,9 @@ class SQL_Engine():
             queries = self.extract_standardised(raw_query)
 
             for query in queries:
+                if len(query.tokens) > 1 and str(query.tokens[-1]) != ';':
+                    print('Missing semicolon.')
+                    break
                 query_list = list(
                     filter(lambda a: str(a) != ' ' and str(a) != ';', query.tokens))
 
