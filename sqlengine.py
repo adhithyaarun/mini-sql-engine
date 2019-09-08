@@ -3,6 +3,7 @@ import sys
 import sqlparse as sql
 import itertools
 import statistics
+import os
 
 
 class SQL_Engine():
@@ -103,13 +104,6 @@ class SQL_Engine():
             parsed.append(tokens)
         return parsed
 
-    def process_join(self):
-        try:
-            if len(self.query['tables']) > 1 and len(self.query['conditions']) > 0:
-                print(self.query['conditions'])
-        except:
-            pass
-
     def table_check(self):
         for table in self.query['tables']:
             if str(table) not in list(self.tables.keys()):
@@ -139,7 +133,7 @@ class SQL_Engine():
                                         str(column), str(specified[0])))
                                     return False
                                 else:
-                                    print('Table {0} does not exist.'.format(
+                                    print('Table {0} not specified.'.format(
                                         str(specified[0])))
                                     return False
                         else:
@@ -170,7 +164,7 @@ class SQL_Engine():
                                     str(column), str(specified[0])))
                                 return False
                             else:
-                                print('Table {0} does not exist.'.format(
+                                print('Table {0} not specified.'.format(
                                     str(specified[0])))
                                 return False
                     else:
@@ -206,7 +200,7 @@ class SQL_Engine():
                                         str(column), str(specified[0])))
                                     return False
                                 else:
-                                    print('Table {0} does not exist.'.format(
+                                    print('Table {0} not specified.'.format(
                                         str(specified[0])))
                                     return False
                         else:
@@ -247,7 +241,7 @@ class SQL_Engine():
                                                     str(column), str(specified[0])))
                                                 return False
                                             else:
-                                                print('Table {0} does not exist.'.format(
+                                                print('Table {0} not specified.'.format(
                                                     str(specified[0])))
                                                 return False
                                     else:
@@ -264,6 +258,15 @@ class SQL_Engine():
                                                         str(column), str(table)))
                                                     return False
                                 operation.append(operator)
+                                operand1 = operation[0].split('.')
+                                operand2 = operation[1].split('.')
+                                if len(self.query['tables']) > 1 and len(operand1) > 0 and len(operand2) > 0:
+                                    if operand1[0] != operand2[0]:
+                                        self.query['join'] = True
+                                        # If both are asked, exclude 2nd, if one is asked exclude other
+                                        self.query['exclude'].append(
+                                            '.'.join(operand2))
+
                                 self.query['conditions'][ind] = operation
                                 flag = True
                                 break
@@ -402,8 +405,6 @@ class SQL_Engine():
                                         passed_now.append(row)
                                 else:
                                     if row[index_1[1]] > int(col2):
-                                        print('{0}, {1}'.format(
-                                            row[index_1[1]], col2))
                                         passed_now.append(row)
                             elif op == '=':
                                 if len(self.query['tables']) > 1:
@@ -443,7 +444,11 @@ class SQL_Engine():
         if records is None:
             print('Empty set.')
         else:
+            skip = []
             for i in range(len(names)):
+                if self.query['join'] is True and names[i] in self.query['exclude']:
+                    skip.append(i)
+                    continue
                 if i == len(names) - 1:
                     print('{0}'.format(names[i]), end='')
                 else:
@@ -455,6 +460,8 @@ class SQL_Engine():
             else:
                 for i in range(len(records)):
                     for j in range(len(records[i])):
+                        if self.query['join'] is True and j in skip:
+                            continue
                         if j == len(records[i]) - 1:
                             print('{0}'.format(records[i][j]), end='')
                         else:
@@ -503,12 +510,20 @@ class SQL_Engine():
             'aggregations': {},
             'columns': [],
             'tables': [],
-            'conditions': []
+            'conditions': [],
+            'exclude': []
         }
 
         if query_type == 'exit' or query_type == 'quit':
             self.quit = True
             return (True, None, parsed)
+        elif query_type == 'history':
+            for query in self.history:
+                print(query)
+            return (True, 'HISTORY', parsed)
+        elif query_type == 'clear':
+            os.system('clear')
+            return (True, 'CLEAR', parsed)
         else:
             if query_type == 'SELECT':
                 ind = 1
@@ -569,7 +584,7 @@ class SQL_Engine():
                         ''.join(cond[start:]).split(';')[0])
                 return (True, None, parsed)
             else:
-                return (False, 'Invalid Query.', [], [], [])
+                return (False, 'Invalid Query.', {})
 
     def run(self):
         while(True):
@@ -588,10 +603,11 @@ class SQL_Engine():
 
                 if self.quit is True:
                     break
-
-                self.process_query()
+                elif message == 'HISTORY' or message == 'CLEAR':
+                    continue
 
                 if success is True:
+                    self.process_query()
                     self.history.append(str(query))
                 else:
                     print(message)
