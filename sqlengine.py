@@ -7,8 +7,8 @@ import os
 
 
 class SQL_Engine():
-    def __init__(self, path):
-        self.path = path
+    def __init__(self):
+        self.path = '../files'
         self.AGGREGATE = {
             'SUM': sum,
             'AVG': statistics.mean,
@@ -83,14 +83,15 @@ class SQL_Engine():
             return table
         else:
             with open(filepath, 'r') as file:
-                reader = csv.reader(file)
+                reader = csv.reader(file, quotechar='"')
 
                 for row in reader:
                     record = []
                     for i in range(len(row)):
                         table['columns'][table['column_names']
-                                         [i]].append(int(row[i]))
-                        record.append((table['column_names'][i], int(row[i])))
+                                         [i]].append(int(row[i].strip('\"')))
+                        record.append(
+                            (table['column_names'][i], int(row[i].strip('\"'))))
                     table['records'].append(dict(record))
             return table
 
@@ -263,9 +264,26 @@ class SQL_Engine():
                                 if len(self.query['tables']) > 1 and len(operand1) > 0 and len(operand2) > 0:
                                     if operand1[0] != operand2[0]:
                                         self.query['join'] = True
-                                        # If both are asked, exclude 2nd, if one is asked exclude other
-                                        self.query['exclude'].append(
-                                            '.'.join(operand2))
+                                        if len(self.query['distinct']) > 0:
+                                            if operation[0] in self.query['distinct'] and operation[1] in self.query['distinct']:
+                                                self.query['exclude'].append(
+                                                    operation[1])
+                                            elif operation[0] in self.query['distinct'] and operation[1] not in self.query['distinct']:
+                                                self.query['exclude'].append(
+                                                    operation[1])
+                                            elif operation[0] not in self.query['distinct'] and operation[1] in self.query['distinct']:
+                                                self.query['exclude'].append(
+                                                    operation[0])
+                                        elif len(self.query['columns']) > 0:
+                                            if operation[0] in self.query['columns'] and operation[1] in self.query['columns']:
+                                                self.query['exclude'].append(
+                                                    operation[1])
+                                            elif operation[0] in self.query['columns'] and operation[1] not in self.query['columns']:
+                                                self.query['exclude'].append(
+                                                    operation[1])
+                                            elif operation[0] not in self.query['columns'] and operation[1] in self.query['columns']:
+                                                self.query['exclude'].append(
+                                                    operation[0])
 
                                 self.query['conditions'][ind] = operation
                                 flag = True
@@ -615,11 +633,43 @@ class SQL_Engine():
             if self.quit is True:
                 break
 
+    def single_query(self, raw_query):
+        while(True):
+            success = False
+            message = ''
+            parsed = None
+            queries = self.extract_standardised(raw_query)
+
+            for query in queries:
+                query_list = list(
+                    filter(lambda a: str(a) != ' ' and str(a) != ';', query.tokens))
+
+                (success, message, self.query) = self.parse_query(query_list)
+
+                if self.quit is True:
+                    break
+                elif message == 'HISTORY' or message == 'CLEAR':
+                    continue
+
+                if success is True:
+                    self.process_query()
+                    self.history.append(str(query))
+                else:
+                    print(message)
+
+            self.quit = True
+            if self.quit is True:
+                break
+
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print('ERROR: Please provide path to data directory.')
         exit(1)
     else:
-        engine = SQL_Engine(sys.argv[1])
-        engine.run()
+        if sys.argv[1].lower() == 'shell':
+            engine = SQL_Engine()
+            engine.run()
+        else:
+            engine = SQL_Engine()
+            engine.single_query(sys.argv[1])
